@@ -11,10 +11,9 @@ Script to compute independent SNPs and loci based on GWAS data.
   * `sudo pip install bx-python`   
 * Pandas (version 0.15.2 or higher)
   * `sudo pip install pandas`
-* PLINK (only needed if you want to construct loci yourself instead of using the precomputed onces for this example)
-  * [PLINK version 1](http://pngu.mgh.harvard.edu/~purcell/plink/) or [PLINK version 2](https://www.cog-genomics.org/plink2/) 
- * Make sure you have PLINK binary genotype formated 1000 Genomes Project genotype data.  You can download [preformated data here](http://www.broadinstitute.org/mpg/depict/depict_download/1kg/1000_genomes_project_phase3_CEU.tar.gz).
- * Please download the SNPsnap collection file, which provides you with precomputed LD r2 boundaries for each 1000 Genome Project phase 3 SNPs. Files can be [downloaded here](http://www.broadinstitute.org/mpg/snpsnap/database_download.html).
+* [PLINK version 1](http://pngu.mgh.harvard.edu/~purcell/plink/) or [PLINK version 2](https://www.cog-genomics.org/plink2/) 
+* Make sure you have PLINK binary genotype formated 1000 Genomes Project genotype data.  You can download [preformated data here](http://www.broadinstitute.org/mpg/depict/depict_download/1kg/1000_genomes_project_phase3_CEU.tar.gz).
+* Please download the SNPsnap collection file, which provides you with precomputed LD r2 boundaries for each 1000 Genome Project phase 3 SNPs. Files can be [downloaded here](http://www.broadinstitute.org/mpg/snpsnap/database_download.html).
 
 ## Quick start
   1. Set `label` to the name of your GWAS summary statistics file (leave out the file extension)

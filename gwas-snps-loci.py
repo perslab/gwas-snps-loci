@@ -11,7 +11,7 @@ from bx.intervals.cluster import ClusterTree
 path = os.getcwd() # Path to directory where input file lives and all output files are written
 
 
-####### EAv2 GWAS summary statistics file settings
+####### GWAS summary statistics file settings
 
 label = "..." # Enter the filename of your gwas summary statistics file (without the file extension)
 gwas_filename = "%s"%(label) 
@@ -67,9 +67,7 @@ def get_plink_clumping(path,label):
 ####### Define linkage-disequilibrium (LD)-independent SNPs as those with low LD (r2 < 0.1) using a window of 500-kb (using PLINK's clumping option).
 
 (std, err) = run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clumping_pvalue, plink_clumping_distance, plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, "%s/plink_output_snps/"%path)
-
 index_snps_df = get_plink_clumping(path,label)
-
 index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.astype(str),inplace=True)
 
 
@@ -78,15 +76,10 @@ index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.a
 # * Get genes (to be added)
 
 collection = pd.read_csv(collection_file, index_col=0, header=0, delimiter="\t", compression = 'gzip')
-
 results_df = index_snps_df.join(collection,how="left")
-
 results_df.reset_index(inplace=True)
-
 results_snps_df = results_df.ix[:,['SNP','CHR','BP','P','SP2','loci_upstream','loci_downstream']]
-
 results_snps_df.rename(columns={'SNP': 'snp_name', 'CHR': 'chr', 'BP': 'pos','P': 'pvalue', 'SP2': 'plink_ld_partners', 'loci_upstream': 'locus_upstream_boundary', 'loci_downstream': 'locus_downstream_boundary'}, inplace=True)
-
 results_snps_df['proxy_snp'] = None
 
 

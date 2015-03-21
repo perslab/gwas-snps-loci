@@ -13,7 +13,7 @@ path = os.getcwd() # Path to directory where input file lives and all output fil
 
 ####### GWAS summary statistics file settings
 
-label = "..." # Enter the filename of your gwas summary statistics file (without the file extension)
+label = "EA2_EduYears_pooled_single_gc.meta" # Enter the filename of your gwas summary statistics file (without the file extension)
 gwas_filename = "%s"%(label) 
 independent_snps_filename = "%s_independent_snps.tab"%(label) 
 independent_loci_filename = "%s_independent_loci.tab"%(label) 
@@ -49,15 +49,29 @@ collection_file = "%s/ld0.6_collection.tab.gz"%path # Change path the SNPsnap co
 ####### Run PLINK
 
 def run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clumping_pvalue, plink_clumping_distance, plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, out_dir):
-    plink_prefix = "%s --bfile %s"%(plink_binary,plink_genotype_data_plink_prefix)
-    cmd = "%s --clump-p1 %s --clump-kb %s --clump-r2 %s --clump-snp-field %s --clump-field %s --clump %s/%s --out %s/%s"%(plink_prefix,plink_clumping_pvalue,plink_clumping_distance,plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, out_dir, gwas_filename) 
-    return subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE, shell=True).communicate()
+	"""
+	OBS#1: the subprocess does *NOT* issue the command via the shell.
+	OBS#2:  - notice that the arguments for "bfile" and "clump" are *QUOTED*. This will ensure that files are safely parsed to PLINK.
+	- one could also use the shlex.split() command
+	"""
+	cmd = [plink_binary, 
+		"--bfile", plink_genotype_data_plink_prefix,
+		"--clump-p1", str(plink_clumping_pvalue),
+		"--clump-kb", str(plink_clumping_distance),
+		"--clump-r2", str(plink_clumping_r2),
+		"--clump-snp-field", plink_clumping_snp_column,
+		"--clump-field", plink_clumping_pvalue_column,
+		"--clump", path+"/"+gwas_filename,
+		"--out", out_dir+"/"+gwas_filename
+	]
+	print "making call {}".format( " ".join(cmd)  )
+	return subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
 
 
 ####### Read PLINK results
 
 def get_plink_clumping(path,label):    
-    df = pd.read_csv("{}/plink_output_snps/{}.clumped".format(path,label),delimiter=r"\s+")
+    df = pd.read_csv("{}/{}.clumped".format(path,label),delimiter=r"\s+")
     return df
 
 
@@ -66,7 +80,7 @@ def get_plink_clumping(path,label):
 
 ####### Define linkage-disequilibrium (LD)-independent SNPs as those with low LD (r2 < 0.1) using a window of 500-kb (using PLINK's clumping option).
 
-(std, err) = run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clumping_pvalue, plink_clumping_distance, plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, "%s/plink_output_snps/"%path)
+(std, err) = run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clumping_pvalue, plink_clumping_distance, plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, path)
 index_snps_df = get_plink_clumping(path,label)
 index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.astype(str),inplace=True)
 

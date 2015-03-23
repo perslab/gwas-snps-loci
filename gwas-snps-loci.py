@@ -21,7 +21,6 @@ pvalue_col = 10 # NB: Counting starts from 0, ie. first columns is referred to a
 marker_col = 1 # Format: <chr:pos>, ie. '6:2321'.  If this column does not exist chr_col and pos_col will be used and this column should be set to 'None'
 chr_col = None # Set ot 'None' if this column does not exist
 pos_col = None # Set ot 'None'if this column does not exist
-sep = '\t'
 plink_clumping_snp_column = "rsID"
 plink_clumping_pvalue_column = "Pvalue"
 
@@ -41,6 +40,9 @@ r2_threshold = 0.8
 
 # SNPsnap collection used to define locus boundaries and genes in associated loci
 collection_file = "%s/ld0.6_collection.tab.gz"%path # Change path the SNPsnap collection (Download from http://www.broadinstitute.org/mpg/snpsnap/database_download.html)
+
+# Gene identifier mapping file
+ensembl_identifier_mapping_file = "mapping_ENSG_HGNC_Entrez_v73.tab.gz"
 
 
 ############################################################################################
@@ -91,7 +93,6 @@ index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.a
 
 collection = pd.read_csv(collection_file, index_col=0, header=0, delimiter="\t", compression = 'gzip')
 results_df = index_snps_df.join(collection,how="left")
-results_df.reset_index(inplace=True)
 results_snps_df = results_df.ix[:,['SNP','CHR','BP','P','SP2','loci_upstream','loci_downstream']]
 results_snps_df.rename(columns={'SNP': 'snp_name', 'CHR': 'chr', 'BP': 'pos','P': 'pvalue', 'SP2': 'plink_ld_partners', 'loci_upstream': 'locus_upstream_boundary', 'loci_downstream': 'locus_downstream_boundary'}, inplace=True)
 results_snps_df['proxy_snp'] = None
@@ -112,9 +113,7 @@ def find_ld_partner(ld_partner_str, column_id):
 missing_from_collection['proxy_snp'] = missing_from_collection.plink_ld_partners.apply(find_ld_partner,args=('rsID',))
 missing_from_collection['locus_upstream_boundary'] = missing_from_collection.plink_ld_partners.apply(find_ld_partner,args=('loci_upstream',))
 missing_from_collection['locus_downstream_boundary'] = missing_from_collection.plink_ld_partners.apply(find_ld_partner,args=('loci_downstream',))
-
 results_snps_df.update(missing_from_collection)
-
 results_snps_df['chr'] = results_snps_df['chr'].astype('int')
 results_snps_df['pos'] = results_snps_df['pos'].astype('int')
 results_snps_df['locus_downstream_boundary'] = results_snps_df['locus_downstream_boundary'].astype('int')
@@ -129,9 +128,9 @@ for i in range(1, 23, 1):
     trees[i] = ClusterTree(merging_distance_kb,min_intervals)
 
 
-for index, row in results_snps_df.iterrows():
+for i, (index, row) in enumerate(results_snps_df.iterrows()):
     if row.chr in range(1,23,1):
-        trees[row.chr].insert(row.locus_upstream_boundary,row.locus_downstream_boundary,index)
+        trees[row.chr].insert(row.locus_upstream_boundary,row.locus_downstream_boundary,i)
 
 
 results_loci_df = pd.DataFrame(columns=['snp_name','chr','pos','pvalue','locus_upstream_boundary','locus_downstream_boundary'])
@@ -163,18 +162,43 @@ for chrom in trees:
             results_loci_df.loc[counter] = pd.Series(data=[min_snp_name, chrom, min_pos, min_pvalue, start, end], index = ['snp_name','chr','pos','pvalue','locus_upstream_boundary','locus_downstream_boundary'])
         
         counter += 1
+results_loci_df.set_index(results_loci_df.chr.astype('int').astype('str') + ":" + results_loci_df.pos.astype('int').astype('str'),inplace=True)
 
 
+# Make sure types are correct
 results_loci_df['chr'] = results_loci_df['chr'].astype('int')
 results_loci_df['pos'] = results_loci_df['pos'].astype('int')
 results_loci_df['locus_downstream_boundary'] = results_loci_df['locus_downstream_boundary'].astype('int')
 results_loci_df['locus_upstream_boundary'] = results_loci_df['locus_upstream_boundary'].astype('int')
 
 
+# Add genes in locus
+results_loci_genes_df = results_loci_df.join(collection.ix[results_loci_df.index,['ID_genes_in_matched_locus']],how="left")
+results_loci_genes_df.rename(columns={'ID_genes_in_matched_locus': 'genes_in_locus_ensembl'}, inplace=True)
+ensembl_raw_df = pd.read_csv(ensembl_identifier_mapping_file, index_col=0, sep="\t", compression='gzip')
+grouped = ensembl_raw_df.groupby(level=0)
+ensembl_df = grouped.last()
+
+def ensembl_to_hgnc(ensembl_gene_list):
+    hgnc_list = []
+    if not isinstance(ensembl_gene_list, float):
+        for e in ensembl_gene_list.split(";"):
+            if e in ensembl_df.index and not isinstance(ensembl_df.ix[e,'HGNC symbol'],float):
+                hgnc_list.append(ensembl_df.ix[e,'HGNC symbol'])
+            else:
+                hgnc_list.append(e)
+
+    return ";".join(hgnc_list) if len(hgnc_list) > 0 else None
+
+
+results_loci_genes_df['genes_in_locus_hgnc'] = results_loci_genes_df.genes_in_locus_ensembl.apply(ensembl_to_hgnc)
+
+
+
 ############################################################################################
-####### Save to results file
+####### Save to output files
 
 results_snps_df.sort(['locus','pos'],inplace=True)
 results_snps_df.to_csv(independent_snps_filename, header=True, sep="\t",index=False, na_rep='NA',float_format="%10.2e")
-results_loci_df.to_csv(independent_loci_filename, header=True, sep="\t",index=False,float_format="%10.2e")
+results_loci_genes_df.to_csv(independent_loci_filename, header=True, sep="\t",index=False, na_rep='NA', float_format="%10.2e")
 

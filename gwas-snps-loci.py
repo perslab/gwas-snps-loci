@@ -32,6 +32,11 @@ plink_binary = "%s/plink_mac/plink"%path # Change to your PLINK executable
 plink_clumping_pvalue =  5e-8
 plink_clumping_distance = 500
 plink_clumping_r2 = 0.1
+plink_ld_snp_list_file = "{}/{}.snps".format(path,label)
+plink_ld_window_kb = 1000
+plink_ld_window = 99999
+plink_ld_window_r2 = 0.2
+plink_output_prefix = "{}/{}_ldpartners".format(path,label)
 
 
 ####### Locus settings
@@ -52,9 +57,7 @@ ensembl_identifier_mapping_file = "mapping_ENSG_HGNC_Entrez_v73.tab.gz"
 
 def run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clumping_pvalue, plink_clumping_distance, plink_clumping_r2, plink_clumping_snp_column, plink_clumping_pvalue_column, path, gwas_filename, out_dir):
 	"""
-	OBS#1: the subprocess does *NOT* issue the command via the shell.
-	OBS#2:  - notice that the arguments for "bfile" and "clump" are *QUOTED*. This will ensure that files are safely parsed to PLINK.
-	- one could also use the shlex.split() command
+    	Function that calls PLINK to get clump GWAS SNPs
 	"""
 	cmd = [plink_binary, 
 		"--bfile", plink_genotype_data_plink_prefix,
@@ -66,8 +69,26 @@ def run_plink_clumping(plink_genotype_data_plink_prefix, plink_binary, plink_clu
 		"--clump", path+"/"+gwas_filename,
 		"--out", out_dir+"/"+gwas_filename
 	]
-	print "making call {}".format( " ".join(cmd)  )
+	print "making plink pruning call {}".format( " ".join(cmd)  )
 	return subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
+
+def run_plink_ld(plink_binary, plink_genotype_data_plink_prefix, plink_ld_snp_list_file, plink_ld_window_kb, plink_ld_window, plink_ld_window_r2, path, gwas_filename, plink_output_prefix):
+    """
+    Function that calls PLINK to get LD buddies
+    """
+    cmd = [plink_binary, 
+        "--bfile", plink_genotype_data_plink_prefix,
+        "--r2",
+        "--ld-snp-list",  str(plink_ld_snp_list_file),
+        "--ld-window-kb", str(plink_ld_window_kb), 
+        "--ld-window", str(plink_ld_window),
+        "--ld-window-r2", str(plink_ld_window_r2),
+        "--out", plink_output_prefix
+    ]
+    
+    print "making plink ld call {}".format( " ".join(cmd)  )
+    
+    return subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE).communicate()
 
 
 ####### Read PLINK results
@@ -86,6 +107,16 @@ def get_plink_clumping(path,label):
 index_snps_df = get_plink_clumping(path,label)
 index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.astype(str),inplace=True)
 
+###### Add new column with clumped SNPs sorted by LD
+pd.Series(index_snps_df.SNP).to_csv(plink_ld_snp_list_file, index=False, header=False)
+(std, err) = run_plink_ld(plink_binary, plink_genotype_data_plink_prefix, plink_ld_snp_list_file, plink_ld_window_kb, plink_ld_window, plink_ld_window_r2, path, gwas_filename, plink_output_prefix)
+ld_partners_df = pd.read_csv("{}.ld".format(plink_output_prefix),delimiter=r"\s+")
+def get_ld_partners(row):
+    snp_partners_df = ld_partners_df.ix[ld_partners_df.SNP_A==row.SNP,:].sort(['R2'], ascending=[0])
+    clump = row.SP2.replace("(1)","").split(",")
+    return (",".join(["{} ({})".format(snp_b,r2) for (snp_b,r2) in zip(snp_partners_df.SNP_B,snp_partners_df.R2.map(lambda x: "{0:.2f}".format(x))) if row.SNP != snp_b and snp_b in clump]))
+index_snps_df['SP2_ld'] = index_snps_df.apply(get_ld_partners,axis=1)
+
 
 # ###### Define associated loci (upstream and downstream boundaries of SNPs from step #1). We use the precomputed SNPsnap collections to directly extract genes and locus boundaries
 # * Get boundaries (LD r2>0.6)
@@ -93,8 +124,8 @@ index_snps_df.set_index(index_snps_df.CHR.astype(str) + ":" + index_snps_df.BP.a
 
 collection = pd.read_csv(collection_file, index_col=0, header=0, delimiter="\t", compression = 'gzip')
 results_df = index_snps_df.join(collection,how="left")
-results_snps_df = results_df.ix[:,['SNP','CHR','BP','P','SP2','loci_upstream','loci_downstream']]
-results_snps_df.rename(columns={'SNP': 'snp_name', 'CHR': 'chr', 'BP': 'pos','P': 'pvalue', 'SP2': 'plink_ld_partners', 'loci_upstream': 'locus_upstream_boundary', 'loci_downstream': 'locus_downstream_boundary'}, inplace=True)
+results_snps_df = results_df.ix[:,['SNP','CHR','BP','P','SP2_ld','loci_upstream','loci_downstream']]
+results_snps_df.rename(columns={'SNP': 'snp_name', 'CHR': 'chr', 'BP': 'pos','P': 'pvalue', 'SP2_ld': 'plink_ld_partners', 'loci_upstream': 'locus_upstream_boundary', 'loci_downstream': 'locus_downstream_boundary'}, inplace=True)
 results_snps_df['proxy_snp'] = None
 
 

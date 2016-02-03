@@ -39,7 +39,7 @@ plink_ld_window_r2 = 0.2
 plink_output_prefix = "{}/{}_ldpartners".format(path,label)
 
 
-####### Locus settings
+####### Locus merging settings
 merging_distance_kb = 250000
 r2_threshold = 0.8
 
